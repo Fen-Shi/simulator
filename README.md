@@ -22,8 +22,7 @@ During working hours, planned patients and ER patients arrive, 4 surgery rooms a
 
 1. **Clone the repository:**
     ```sh
-    git clone https://github.com/yourusername/hospital-simulation.git
-    cd hospital-simulation
+    git clone https://github.com/Fen-Shi/simulator
     ```
 
 2. **Install dependencies:**
@@ -32,10 +31,17 @@ During working hours, planned patients and ER patients arrive, 4 surgery rooms a
     ```
 ## Running the Simulation
 1. **Start the simulation:**
+Run the simulator.py on https://lehre.bpm.in.tum.de/ website. 
+
    ```
    python simulator.py
    ```
-2. **Access the endpoints:**
+   `simulator.py` is designed to:
+- Spawn instances automatically.
+- Process these instances through the defined workflow.
+- Monitor and log the total duration for each instance. (The duration can be found on the instance link on the CPEE platform)
+
+2. **Endpoints:**
 
 - `POST /patient_init`: Initialize a patient instance.
 - `POST /Intake`: Handle patient intake.
