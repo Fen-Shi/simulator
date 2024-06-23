@@ -45,11 +45,11 @@ patient_queue_ready_event_non_working_hour = threading.Event()
 
 
 # Function to signal when the instances queues are ready
-def set_patient_queue_ready():
+def set_patient_queue_ready_non_working_hour():
     patient_queue_ready_event_non_working_hour.set()
 
 
-def set_patient_queue_ready_working():
+def set_patient_queue_ready_working_hour():
     patient_queue_ready_event_working_hour.set()
 
 
@@ -93,15 +93,21 @@ def process_queue_er():
             with er_semaphore:
                 # Occupy 1 ER personnel for the first patient in the queue
                 db.update_resource('ER', er_count - 1)
-                callback_url = db.get_queue_er()[0]
+                callback_url, waiting_duration = db.get_queue_er()[0]
                 print(callback_url, 'First patient in the queue go to ER')
+                # Remove the patient from the queue after treatment
+                db.delete_from_queue_er(callback_url)
 
                 # Simulate the duration of ER treatment using a normal distribution
                 duration = max(0, random.normal(loc=2, scale=1 / 2, size=None))
                 gevent.sleep(duration)
 
-                # Remove the patient from the queue after treatment
-                db.delete_from_queue_er(callback_url)
+                # add the duration to the waiting time of instances in the queue
+                queue = db.get_queue_er()
+                for instance in queue:
+                    callback_url, waiting_time = instance
+                    db.update_queue_er(callback_url, waiting_time + duration)
+
                 # Release the occupied ER personnel after treatment
                 db.update_resource('ER', db.get_resource('ER') + 1)
 
@@ -114,7 +120,7 @@ def process_queue_er():
                     diagnosis = ""
                     require_surgery = ""
 
-                callback_response = {'status': 'ER Treatment finished', 'duration': round(duration, 2),
+                callback_response = {'status': 'ER Treatment finished', 'duration': round(waiting_duration+duration, 2),
                                      'phantom_pain': phantom_pain,
                                      'diagnosis': diagnosis,
                                      'require_surgery': require_surgery}
@@ -137,18 +143,23 @@ def process_queue_surgery():
         if len(queue_surgery) > 0 and surgery_room_count > 0:
             with surgery_semaphore:
                 db.update_resource('Surgery', surgery_room_count - 1)
+                patient_id, diagnosis, status, callback_url, waiting_duration = db.get_queue('Queue_Surgery')[0]
                 print(callback_url, 'First patient in the queue go to surgery')
+                db.delete_from_queue('Queue_Surgery', callback_url)
 
-                patient_id, diagnosis, status, callback_url = db.get_queue('Queue_Surgery')[0]
                 duration = diagnosis_helper.diagnosis_operation_time(diagnosis)
                 gevent.sleep(duration)
-                db.delete_from_queue('Queue_Surgery', callback_url)
-                print(db.get_queue('Queue_Surgery'))
+
+                queue = db.get_queue('Queue_Surgery')
+                for instance in queue:
+                    patient_id, diagnosis, status, callback_url, waiting_time = instance
+                    db.update_queue('Queue_Surgery', callback_url, waiting_time + duration)
+
                 db.update_resource('Surgery', db.get_resource('Surgery') + 1)
 
                 callback_response = {
                     'status': 'Surgery finished',
-                    'duration': round(duration, 2)
+                    'duration': round(waiting_duration + duration, 2)
                 }
 
                 callback(callback_response, callback_url)
@@ -167,17 +178,24 @@ def process_queue_nursing_a():
         if len(queue_nursing_a) > 0 and bed_a_count > 0:
             with bed_a_semaphore:
                 db.update_resource('Bed_A', bed_a_count - 1)
+                patient_id, diagnosis, status, callback_url, waiting_duration = db.get_queue('Queue_Nursing_A')[0]
                 print(callback_url, 'First patient in the queue go to bed A')
-                patient_id, diagnosis, status, callback_url = db.get_queue('Queue_Nursing_A')[0]
+                db.delete_from_queue('Queue_Nursing_A', callback_url)
+
                 duration = diagnosis_helper.diagnosis_nursing_time(diagnosis)
                 gevent.sleep(duration)
-                db.delete_from_queue('Queue_Nursing_A', callback_url)
+
+                queue = db.get_queue('Queue_Nursing_A')
+                for instance in queue:
+                    patient_id, diagnosis, status, callback_url, waiting_time = instance
+                    db.update_queue('Queue_Nursing_A', callback_url, waiting_time + duration)
+
                 db.update_resource('Bed_A', db.get_resource('Bed_A') + 1)
                 release = diagnosis_helper.no_complication(diagnosis)
 
                 callback_response = {
                     'status': 'Nursing finished',
-                    'duration': round(duration, 2),
+                    'duration': round(waiting_duration+duration, 2),
                     'release': release
                 }
                 callback(callback_response, callback_url)
@@ -196,17 +214,24 @@ def process_queue_nursing_b():
         if len(queue_nursing_b) > 0 and bed_b_count > 0:
             with bed_b_semaphore:
                 db.update_resource('Bed_B', bed_b_count - 1)
+                patient_id, diagnosis, status, callback_url, waiting_duration = db.get_queue('Queue_Nursing_B')[0]
                 print(callback_url, 'First patient in the queue go to bed B')
-                patient_id, diagnosis, status, callback_url = db.get_queue('Queue_Nursing_B')[0]
+                db.delete_from_queue('Queue_Nursing_B', callback_url)
+
                 duration = diagnosis_helper.diagnosis_nursing_time(diagnosis)
                 gevent.sleep(duration)
-                db.delete_from_queue('Queue_Nursing_B', callback_url)
+
+                queue = db.get_queue('Queue_Nursing_B')
+                for instance in queue:
+                    patient_id, diagnosis, status, callback_url, waiting_time = instance
+                    db.update_queue('Queue_Nursing_B', callback_url, waiting_time + duration)
+
                 db.update_resource('Bed_B', db.get_resource('Bed_B') + 1)
                 release = diagnosis_helper.no_complication(diagnosis)
 
                 callback_response = {
                     'status': 'Nursing finished',
-                    'duration': round(duration, 2),
+                    'duration': round(waiting_duration+duration, 2),
                     'release': release
                 }
                 callback(callback_response, callback_url)
@@ -238,12 +263,12 @@ def patient_init():
         patients_added_working_hour += 1
 
     # Check if all non-working hour patients have been added
-    if patients_added_non_working_hour == patients_count_non_working_hour:
-        set_patient_queue_ready()
+    if patients_added_non_working_hour == patients_count_non_working_hour and patients_added_non_working_hour != 0 and patients_added_non_working_hour != 0:
+        set_patient_queue_ready_non_working_hour()
 
     # Check if all working hour patients have been added
-    if patients_added_working_hour == patients_count_working_hour:
-        set_patient_queue_ready_working()
+    if patients_added_working_hour == patients_count_working_hour and patients_added_working_hour != 0 and patients_count_working_hour != 0:
+        set_patient_queue_ready_working_hour()
     return callback_http_response()
 
 
@@ -318,7 +343,7 @@ def handle_er_resource():
         if len(db.get_queue_er()) > 0 or er_personnel_count <= 0:
             # Add the patient to the ER queue if the ER is busy or no personnel are available
             db.add_to_queue_er(callback_url)
-            print('ER is busy', callback_url,'added to ER queue')
+            print('ER is busy', callback_url, 'added to ER queue')
             return callback_http_response()
 
         else:
@@ -424,9 +449,12 @@ def nursing():
             data = {'status': 'Nursing finished', 'duration': round(duration, 2), 'release': release}
             response.content_type = 'application/json'
             return json.dumps(data)
+
+
 # end of the process
 
 
+# simulation
 def process_patient_queue_non_working_hour():
     """
     Spawned patient instances arrive during non-working hours, start the process.
@@ -529,26 +557,24 @@ def simulation():
         # Non-working hours
         # Wait for the patient queue to be ready for non-working hours
         patient_queue_ready_event_non_working_hour.wait()
-        print('non-working hour started, surgery room 1 available')
         # Update the Surgery resource to reflect non-working hour availability (1 Surgery room available)
         db.update_resource('Surgery', db.get_resource('Surgery') - 4)
+        print('non-working hour started, surgery room up to 1 available, currently available:', db.get_resource('Surgery'))
         process_patient_queue_non_working_hour()
         patients_count_non_working_hour = 0
         patients_added_non_working_hour = 0
         patient_queue_ready_event_non_working_hour.clear()  # Clear the event to reset to not ready state
-        patient_queue_ready_event_working_hour.clear()
 
         # Working hours
         # Wait for the patient queue to be ready for working hours
         patient_queue_ready_event_working_hour.wait()
-        print('working hour started, surgery room 5 available')
         # Update the Surgery resource to reflect non-working hour availability (5 Surgery rooms available)
         db.update_resource('Surgery', db.get_resource('Surgery') + 4)
+        print('working hour started, surgery room up to 5 available, currently available:', db.get_resource('Surgery'))
         process_patient_queue_working_hour()
         patients_count_working_hour = 0
         patients_added_working_hour = 0
         patient_queue_ready_event_working_hour.clear()
-        patient_queue_ready_event_non_working_hour.clear()
 
 
 if __name__ == '__main__':

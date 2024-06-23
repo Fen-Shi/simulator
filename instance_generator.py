@@ -81,3 +81,6 @@ def simulate_er_patients(current_time, end_time):
     return count
 
 
+
+
+

@@ -20,7 +20,8 @@ def init_db():
         patient_id TEXT,
         diagnosis TEXT,
         status TEXT,
-        callback_url TEXT
+        callback_url TEXT,
+        duration REAL
     )
     ''')
     cursor.execute('''
@@ -29,7 +30,8 @@ def init_db():
         patient_id TEXT,
         diagnosis TEXT,
         status TEXT,
-        callback_url TEXT
+        callback_url TEXT,
+        duration REAL
     )
     ''')
     cursor.execute('''
@@ -38,15 +40,17 @@ def init_db():
         patient_id TEXT,
         diagnosis TEXT,
         status TEXT,
-        callback_url TEXT
+        callback_url TEXT,
+        duration REAL
     )
     ''')
     cursor.execute('''
-     CREATE TABLE IF NOT EXISTS Queue_ER (
-         id INTEGER PRIMARY KEY AUTOINCREMENT,
-         callback_url TEXT
-     )
-     ''')
+        CREATE TABLE IF NOT EXISTS Queue_ER (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            callback_url TEXT,
+            duration REAL
+        )
+    ''')
 
     cursor.execute("INSERT INTO Resources (Intake, Surgery, Bed_A, Bed_B, ER) VALUES (4, 5, 30, 40, 9)")
     conn.commit()
@@ -84,53 +88,56 @@ def add_to_queue(queue_type, patient_id, diagnosis, status, callback_url):
     cursor = conn.cursor()
 
     if queue_type == 'Queue_Surgery':
-        cursor.execute("INSERT INTO Queue_Surgery (patient_id, diagnosis, status, callback_url) VALUES (?, ?, ?,?)",
-                       (patient_id, diagnosis, status, callback_url))
+        cursor.execute(
+            "INSERT INTO Queue_Surgery (patient_id, diagnosis, status, callback_url, duration) VALUES (?, ?, ?,?,?)",
+            (patient_id, diagnosis, status, callback_url, 0))
         conn.commit()
 
         if status == 'ER Treatment finished':
             cursor.execute(
-                "SELECT patient_id, diagnosis, status, callback_url FROM Queue_Surgery ORDER BY CASE WHEN status = 'ER Treatment finished' THEN 1 ELSE 2 END, id")
+                "SELECT patient_id, diagnosis, status, callback_url, duration FROM Queue_Surgery ORDER BY CASE WHEN status = 'ER Treatment finished' THEN 1 ELSE 2 END, id")
             sorted_queue = cursor.fetchall()
             cursor.execute("DELETE FROM Queue_Surgery")
             for patient in sorted_queue:
                 cursor.execute(
-                    "INSERT INTO Queue_Surgery (patient_id, diagnosis, status, callback_url) VALUES (?, ?, ?, ?)",
-                    (patient[0], patient[1], patient[2], patient[3]))
+                    "INSERT INTO Queue_Surgery (patient_id, diagnosis, status, callback_url, duration) VALUES (?, ?, ?, ?, ?)",
+                    (patient[0], patient[1], patient[2], patient[3], patient[4]))
         conn.commit()
         conn.close()
 
     if queue_type == 'Queue_Nursing_A':
-        cursor.execute("INSERT INTO Queue_Nursing_A (patient_id, diagnosis, status, callback_url) VALUES (?, ?, ?, ?)",
-                       (patient_id, diagnosis, status, callback_url))
+        cursor.execute(
+            "INSERT INTO Queue_Nursing_A (patient_id, diagnosis, status, callback_url, duration) VALUES (?, ?, ?, ?,?)",
+            (patient_id, diagnosis, status, callback_url, 0))
         conn.commit()
 
         if status == 'ER Treatment finished':
             cursor.execute(
-                "SELECT patient_id, diagnosis, status, callback_url FROM Queue_Nursing_A ORDER BY CASE WHEN status = 'ER Treatment finished' THEN 1 ELSE 2 END, id")
+                "SELECT patient_id, diagnosis, status, callback_url, duration FROM Queue_Nursing_A ORDER BY CASE WHEN status = 'ER Treatment finished' THEN 1 ELSE 2 END, id")
             sorted_queue = cursor.fetchall()
             cursor.execute("DELETE FROM Queue_Nursing_A")
             for patient in sorted_queue:
                 cursor.execute(
-                    "INSERT INTO Queue_Nursing_A (patient_id, diagnosis, status, callback_url) VALUES (?, ?, ?, ?)",
-                    (patient[0], patient[1], patient[2], patient[3]))
+                    "INSERT INTO Queue_Nursing_A (patient_id, diagnosis, status, callback_url, duration) VALUES (?, ?, ?, ?,?)",
+                    (patient[0], patient[1], patient[2], patient[3], patient[4]))
         conn.commit()
         conn.close()
 
     if queue_type == 'Queue_Nursing_B':
-        cursor.execute("INSERT INTO Queue_Nursing_B (patient_id, diagnosis, status, callback_url) VALUES (?, ?, ?, ?)",
-                       (patient_id, diagnosis, status, callback_url))
+        cursor.execute(
+            "INSERT INTO Queue_Nursing_B (patient_id, diagnosis, status, callback_url, duration) VALUES (?, ?, ?, ?,?)",
+            (patient_id, diagnosis, status, callback_url, 0))
         conn.commit()
 
         if status == 'ER Treatment finished':
             cursor.execute(
-                "SELECT patient_id, diagnosis, status, callback_url FROM Queue_Nursing_B ORDER BY CASE WHEN status = 'ER Treatment finished' THEN 1 ELSE 2 END, id")
+                "SELECT patient_id, diagnosis, status, callback_url, duration FROM Queue_Nursing_B ORDER BY CASE WHEN status = 'ER Treatment finished' THEN 1 ELSE 2 END, id")
             sorted_queue = cursor.fetchall()
             cursor.execute("DELETE FROM Queue_Nursing_B")
             for patient in sorted_queue:
                 cursor.execute(
-                    "INSERT INTO Queue_Nursing_B (patient_id, diagnosis, status, callback_url) VALUES (?, ?, ?, ?)",
-                    (patient[0], patient[1], patient[2], patient[3]))
+                    "INSERT INTO Queue_Nursing_B (patient_id, diagnosis, status, callback_url, duration) VALUES (?, ?, ?, ?,?)",
+                    (patient[0], patient[1], patient[2], patient[3], patient[4]))
         conn.commit()
         conn.close()
 
@@ -154,7 +161,6 @@ def get_count_queue(queue_type, status):
     return count
 
 
-
 def get_queue(queue_type):
     """
     Get the queue.
@@ -163,11 +169,11 @@ def get_queue(queue_type):
     cursor = conn.cursor()
 
     if queue_type == 'Queue_Surgery':
-        cursor.execute("SELECT patient_id, diagnosis, status, callback_url FROM Queue_Surgery")
+        cursor.execute("SELECT patient_id, diagnosis, status, callback_url, duration FROM Queue_Surgery")
     if queue_type == 'Queue_Nursing_A':
-        cursor.execute("SELECT patient_id, diagnosis, status, callback_url FROM Queue_Nursing_A")
+        cursor.execute("SELECT patient_id, diagnosis, status, callback_url, duration FROM Queue_Nursing_A")
     if queue_type == 'Queue_Nursing_B':
-        cursor.execute("SELECT patient_id, diagnosis, status, callback_url FROM Queue_Nursing_B")
+        cursor.execute("SELECT patient_id, diagnosis, status, callback_url, duration FROM Queue_Nursing_B")
 
     queue = cursor.fetchall()
     conn.close()
@@ -191,13 +197,42 @@ def delete_from_queue(queue_type, callback_url):
     conn.close()
 
 
+def update_queue(queue_type, callback_url, duration):
+    """
+    Update a patient's record in the Queue.
+    """
+    conn = sqlite3.connect('hospital_resources.db')
+    cursor = conn.cursor()
+    if queue_type == 'Queue_Surgery':
+        cursor.execute('''
+                    UPDATE Queue_Surgery
+                    SET duration = ?
+                    WHERE callback_url = ?
+                ''', (duration, callback_url))
+    if queue_type == 'Queue_Nursing_A':
+        cursor.execute('''
+                    UPDATE Queue_Nursing_A
+                    SET duration = ?
+                    WHERE callback_url = ?
+                ''', (duration, callback_url))
+    if queue_type == 'Queue_Nursing_A':
+        cursor.execute('''
+                    UPDATE Queue_Nursing_B
+                    SET duration = ?
+                    WHERE callback_url = ?
+                ''', (duration, callback_url))
+    conn.commit()
+    conn.close()
+
+
 def add_to_queue_er(callback_url):
     """
     Add a patient to queue er.
     """
     conn = sqlite3.connect('hospital_resources.db')
     cursor = conn.cursor()
-    cursor.execute('INSERT INTO Queue_ER (callback_url) VALUES (?)', (callback_url,))
+    cursor.execute(
+        "INSERT INTO Queue_ER (callback_url, duration) VALUES (?, ?)", (callback_url, 0))
     conn.commit()
     conn.close()
 
@@ -220,15 +255,26 @@ def get_queue_er():
     """
     conn = sqlite3.connect('hospital_resources.db')
     cursor = conn.cursor()
-    cursor.execute("SELECT callback_url FROM Queue_ER")
-    rows = cursor.fetchall()
-
-    # Close the connection
+    cursor.execute("SELECT callback_url, duration FROM Queue_ER")
+    queue = cursor.fetchall()
     conn.close()
+    return queue
+    # Close the connection
 
-    # Extract the first element from each tuple in the result
-    result = [row[0] for row in rows]
-    return result
+
+def update_queue_er(callback_url, duration):
+    """
+    Update a patient's record in the Queue_ER table.
+    """
+    conn = sqlite3.connect('hospital_resources.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+                UPDATE Queue_ER
+                SET duration = ?
+                WHERE callback_url = ?
+            ''', (duration, callback_url))
+    conn.commit()
+    conn.close()
 
 
 if __name__ == '__main__':
