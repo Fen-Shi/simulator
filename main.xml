@@ -1,0 +1,366 @@
+<testset xmlns="http://cpee.org/ns/properties/2.0">
+  <executionhandler>ruby</executionhandler>
+  <dataelements>
+    <processes>[]</processes>
+    <duration>0</duration>
+  </dataelements>
+  <endpoints>
+    <machine>machine</machine>
+    <user>https-post://cpee.org/services/timeout-user.php</user>
+    <auto>https-post://cpee.org/services/timeout-auto.php</auto>
+    <sensor>sensor</sensor>
+    <human>human</human>
+    <subprocess>https-post://cpee.org/flow/start/url/</subprocess>
+    <plc>plc</plc>
+    <timeout>https://cpee.org/services/timeout.php</timeout>
+    <robot>robot</robot>
+    <send>https-post://cpee.org/ing/correlators/message/send/</send>
+    <receive>https-get://cpee.org/ing/correlators/message/receive/</receive>
+    <robot_subprocess>robot_subprocess</robot_subprocess>
+    <wait>wait</wait>
+    <erTreatment>https://lehre.bpm.in.tum.de/ports/23462/ER_Resource</erTreatment>
+    <patientID>https://lehre.bpm.in.tum.de/ports/23462/patientID</patientID>
+    <patient_init>https://lehre.bpm.in.tum.de/ports/23462/patient_init</patient_init>
+    <intake>https://lehre.bpm.in.tum.de/ports/23462/Intake</intake>
+    <surgery>https://lehre.bpm.in.tum.de/ports/23462/surgery</surgery>
+    <nursing>https://lehre.bpm.in.tum.de/ports/23462/nursing</nursing>
+  </endpoints>
+  <attributes>
+    <guarded>none</guarded>
+    <creator>Christine Ashcreek</creator>
+    <info>main</info>
+    <author>Christine Ashcreek</author>
+    <guarded_id/>
+    <modeltype>CPEE</modeltype>
+    <theme>extended</theme>
+    <model_uuid>0884ca48-24c0-46c6-963d-e5fb47acab4e</model_uuid>
+    <model_version/>
+    <design_dir>Teaching.dir/Prak.dir/Challengers.dir/Fen_Shi.dir</design_dir>
+    <design_stage>development</design_stage>
+  </attributes>
+  <description>
+    <description xmlns="http://cpee.org/ns/description/1.0">
+      <call id="a10" endpoint="patient_init">
+        <parameters>
+          <label>Patient Admission</label>
+          <method>:post</method>
+          <arguments>
+            <patientID>!data.patientID</patientID>
+            <patientType>!data.patientType</patientType>
+            <arrival_time>!data.arrival_time</arrival_time>
+          </arguments>
+        </parameters>
+        <code>
+          <prepare/>
+          <finalize output="result">data.status = result['status']
+data.processes &lt;&lt; result['arrival_time']
+data.processes &lt;&lt; result['status']</finalize>
+          <update output="result"/>
+          <rescue output="result"/>
+        </code>
+        <annotations>
+          <_generic/>
+          <_timing>
+            <_timing_weight/>
+            <_timing_avg/>
+            <explanations/>
+          </_timing>
+          <_shifting>
+            <_shifting_type>Duration</_shifting_type>
+          </_shifting>
+          <_context_data_analysis>
+            <probes/>
+            <ips/>
+          </_context_data_analysis>
+          <report>
+            <url/>
+          </report>
+          <_notes>
+            <_notes_general/>
+          </_notes>
+        </annotations>
+        <documentation>
+          <input/>
+          <output/>
+          <implementation>
+            <description/>
+          </implementation>
+          <code>
+            <description/>
+          </code>
+        </documentation>
+      </call>
+      <choose mode="exclusive">
+        <alternative condition="data.status==&quot;sent home&quot;">
+          <_probability>
+            <_probability_min/>
+            <_probability_max/>
+            <_probability_avg/>
+          </_probability>
+          <manipulate id="a1" label="Replan">if data.patientID.to_s.empty?
+  data.patientID= SecureRandom.uuid
+end
+
+data.planned_appointment = 0
+data.processes &lt;&lt; "replanned"</manipulate>
+        </alternative>
+        <otherwise>
+          <choose mode="exclusive">
+            <alternative condition="data.patientType==&quot;ER&quot;">
+              <_probability>
+                <_probability_min/>
+                <_probability_max/>
+                <_probability_avg/>
+              </_probability>
+              <call id="a3" endpoint="erTreatment">
+                <parameters>
+                  <label>ER Treatment</label>
+                  <method>:post</method>
+                  <arguments/>
+                </parameters>
+                <code>
+                  <prepare/>
+                  <finalize output="result">if data.patientID.to_s.empty?  
+   data.patientID = SecureRandom.uuid
+end
+
+data.phantom_pain =result['phantom_pain']
+data.require_surgery=result['require_surgery']
+data.status = result['status']
+data.diagnosis= result['diagnosis']
+data.processes &lt;&lt; result['status']
+data.processes &lt;&lt; result['duration']
+data.duration+=result['duration']</finalize>
+                  <update output="result"/>
+                  <rescue output="result"/>
+                </code>
+                <annotations>
+                  <_generic/>
+                  <_timing>
+                    <_timing_weight/>
+                    <_timing_avg/>
+                    <explanations/>
+                  </_timing>
+                  <_shifting>
+                    <_shifting_type>Duration</_shifting_type>
+                  </_shifting>
+                  <_context_data_analysis>
+                    <probes/>
+                    <ips/>
+                  </_context_data_analysis>
+                  <report>
+                    <url/>
+                  </report>
+                  <_notes>
+                    <_notes_general/>
+                  </_notes>
+                </annotations>
+                <documentation>
+                  <input/>
+                  <output/>
+                  <implementation>
+                    <description/>
+                  </implementation>
+                  <code>
+                    <description/>
+                  </code>
+                </documentation>
+              </call>
+            </alternative>
+            <otherwise>
+              <call id="a4" endpoint="intake">
+                <parameters>
+                  <label>Intake</label>
+                  <method>:post</method>
+                  <arguments>
+                    <diagnosis>!data.diagnosis</diagnosis>
+                  </arguments>
+                </parameters>
+                <code>
+                  <prepare/>
+                  <finalize output="result">data.status = result['status']
+data.require_surgery=result['require_surgery']
+data.processes &lt;&lt; result['status']
+data.processes &lt;&lt; result['duration']
+data.duration+=result['duration']</finalize>
+                  <update output="result"/>
+                  <rescue output="result"/>
+                </code>
+                <annotations>
+                  <_generic/>
+                  <_timing>
+                    <_timing_weight/>
+                    <_timing_avg/>
+                    <explanations/>
+                  </_timing>
+                  <_shifting>
+                    <_shifting_type>Duration</_shifting_type>
+                  </_shifting>
+                  <_context_data_analysis>
+                    <probes/>
+                    <ips/>
+                  </_context_data_analysis>
+                  <report>
+                    <url/>
+                  </report>
+                  <_notes>
+                    <_notes_general/>
+                  </_notes>
+                </annotations>
+                <documentation>
+                  <input/>
+                  <output/>
+                  <implementation>
+                    <description/>
+                  </implementation>
+                  <code>
+                    <description/>
+                  </code>
+                </documentation>
+              </call>
+            </otherwise>
+          </choose>
+          <choose mode="exclusive">
+            <alternative condition="data.phantom_pain=='true'">
+              <_probability>
+                <_probability_min/>
+                <_probability_max/>
+                <_probability_avg/>
+              </_probability>
+            </alternative>
+            <otherwise>
+              <loop mode="post_test" condition="data.release=='false'">
+                <_probability>
+                  <_probability_min/>
+                  <_probability_max/>
+                  <_probability_avg/>
+                </_probability>
+                <choose mode="exclusive">
+                  <alternative condition="data.require_surgery=='false'">
+                    <_probability>
+                      <_probability_min/>
+                      <_probability_max/>
+                      <_probability_avg/>
+                    </_probability>
+                  </alternative>
+                  <otherwise>
+                    <call id="a5" endpoint="surgery">
+                      <parameters>
+                        <label>Surgery</label>
+                        <method>:post</method>
+                        <arguments>
+                          <patient_id>!data.patientID</patient_id>
+                          <status>!data.status</status>
+                          <diagnosis>!data.diagnosis</diagnosis>
+                        </arguments>
+                      </parameters>
+                      <code>
+                        <prepare/>
+                        <finalize output="result">data.status = result['status']
+data.processes &lt;&lt; result['status']
+data.processes &lt;&lt; result['duration']
+data.duration+=result['duration']</finalize>
+                        <update output="result"/>
+                        <rescue output="result"/>
+                      </code>
+                      <annotations>
+                        <_generic/>
+                        <_timing>
+                          <_timing_weight/>
+                          <_timing_avg/>
+                          <explanations/>
+                        </_timing>
+                        <_shifting>
+                          <_shifting_type>Duration</_shifting_type>
+                        </_shifting>
+                        <_context_data_analysis>
+                          <probes/>
+                          <ips/>
+                        </_context_data_analysis>
+                        <report>
+                          <url/>
+                        </report>
+                        <_notes>
+                          <_notes_general/>
+                        </_notes>
+                      </annotations>
+                      <documentation>
+                        <input/>
+                        <output/>
+                        <implementation>
+                          <description/>
+                        </implementation>
+                        <code>
+                          <description/>
+                        </code>
+                      </documentation>
+                    </call>
+                  </otherwise>
+                </choose>
+                <call id="a6" endpoint="nursing">
+                  <parameters>
+                    <label>Nursing</label>
+                    <method>:post</method>
+                    <arguments>
+                      <patient_id>!data.patientID</patient_id>
+                      <status>!data.status</status>
+                      <diagnosis>!data.diagnosis</diagnosis>
+                    </arguments>
+                  </parameters>
+                  <code>
+                    <prepare/>
+                    <finalize output="result">data.status = result['status']
+data.release = result['release']
+data.processes &lt;&lt; result['status']
+data.processes &lt;&lt; result['duration']
+data.duration+=result['duration']</finalize>
+                    <update output="result"/>
+                    <rescue output="result"/>
+                  </code>
+                  <annotations>
+                    <_generic/>
+                    <_timing>
+                      <_timing_weight/>
+                      <_timing_avg/>
+                      <explanations/>
+                    </_timing>
+                    <_shifting>
+                      <_shifting_type>Duration</_shifting_type>
+                    </_shifting>
+                    <_context_data_analysis>
+                      <probes/>
+                      <ips/>
+                    </_context_data_analysis>
+                    <report>
+                      <url/>
+                    </report>
+                    <_notes>
+                      <_notes_general/>
+                    </_notes>
+                  </annotations>
+                  <documentation>
+                    <input/>
+                    <output/>
+                    <implementation>
+                      <description/>
+                    </implementation>
+                    <code>
+                      <description/>
+                    </code>
+                  </documentation>
+                </call>
+              </loop>
+            </otherwise>
+          </choose>
+          <manipulate id="a11" label="Releasing">data.status="released"
+data.processes &lt;&lt; "released"</manipulate>
+        </otherwise>
+      </choose>
+    </description>
+  </description>
+  <transformation>
+    <description type="copy"/>
+    <dataelements type="none"/>
+    <endpoints type="none"/>
+  </transformation>
+</testset>

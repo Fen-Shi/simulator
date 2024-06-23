@@ -48,8 +48,9 @@ During working hours, planned patients and ER patients arrive, 4 surgery rooms a
 
 - The simulation starts from 00:00 01.01.2018 and runs continuously, 1 h in real world = 1 s in simulator.
 - Patients are spawned based on working and non-working hours.
-- planned patient arrive during working hours with rate unif(0,1)
+- planned patient with Diagnosis 'A' and 'B' arrive during working hours with rate unif(0,1)
 - ER patient arrive throughout the day with rate exp(1)
+
 
 2. **Patient Admission:**
 
@@ -58,6 +59,8 @@ During working hours, planned patients and ER patients arrive, 4 surgery rooms a
 - Treatment is infeasible either if more than two patients have finished the intake,
 but have not yet been processed in the Surgery or Nursing departments, or when all Intake
 resources are occupied upon a patient's arrival.
+- Patients without ID will be directly sent home.
+- Patients sent home will be planned with next appointment(currently return 0 in the process model, to be implemented in Planned)
 
 3. **Resource Management:**
 
@@ -70,6 +73,7 @@ operating room outside the working hours
 
 - Patient queues are processed during both working and non-working hours.
 - Non-working hours have limited resource availability, while working hours have full resource availability.
+- Waiting time in the queue will be added to the duration.
 
 ## Detailed Function Descriptions
 `simulator.py`
