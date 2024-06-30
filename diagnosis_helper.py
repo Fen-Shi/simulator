@@ -91,4 +91,3 @@ class DiagnosisHelper:
             return 'false'
         else:
             return 'true'
-
