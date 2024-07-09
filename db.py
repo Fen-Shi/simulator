@@ -46,7 +46,7 @@ def init_db():
     ''')
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS Queue_ER (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id TEXT,
             callback_url TEXT,
             duration REAL
         )
@@ -225,14 +225,14 @@ def update_queue(queue_type, callback_url, duration):
     conn.close()
 
 
-def add_to_queue_er(callback_url):
+def add_to_queue_er(patient_id, callback_url):
     """
     Add a patient to queue er.
     """
     conn = sqlite3.connect('hospital_resources.db')
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT INTO Queue_ER (callback_url, duration) VALUES (?, ?)", (callback_url, 0))
+        "INSERT INTO Queue_ER (patient_id, callback_url, duration) VALUES (?, ?, ?)", (patient_id, callback_url, 0))
     conn.commit()
     conn.close()
 
@@ -255,7 +255,7 @@ def get_queue_er():
     """
     conn = sqlite3.connect('hospital_resources.db')
     cursor = conn.cursor()
-    cursor.execute("SELECT callback_url, duration FROM Queue_ER")
+    cursor.execute("SELECT patient_id, callback_url, duration FROM Queue_ER")
     queue = cursor.fetchall()
     conn.close()
     return queue

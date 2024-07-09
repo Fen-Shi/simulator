@@ -81,6 +81,11 @@ def simulate_er_patients(current_time, end_time):
     return count
 
 
+print(create_patient_instance('Planned', '1','A2', datetime.datetime(2018, 1, 1, 8, 0).isoformat()))
+
+
+
+
 
 
 

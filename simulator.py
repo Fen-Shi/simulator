@@ -2,6 +2,7 @@
 import datetime
 import threading
 import time
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from queue import PriorityQueue
 from gevent import monkey
@@ -17,11 +18,47 @@ from numpy import random
 import requests
 import db
 import diagnosis_helper as dh
+from planner import planner
 from instance_generator import simulate_er_patients, simulate_planned_patients_a, simulate_planned_patients_b
 from time_helper import start_time, end_time, is_not_working_hour, next_working_hour, next_non_working_hour
 
 app = Bottle()
 diagnosis_helper = dh.DiagnosisHelper()
+resources = []
+
+def add_resources(cid, task, start_time, diagnosis, wait):
+    resource = {
+        "cid": cid,
+        "task": task,
+        "start": start_time.isoformat(),
+        "info": {"diagnosis": diagnosis},
+        "wait": wait
+    }
+    resources.append(resource)
+    print(json.dumps(resource))
+
+
+def update_resource(cid, new_task=None, new_start=None, new_wait=None, new_diagnosis=None):
+    for resource in resources:
+        if resource["cid"] == cid:
+            if new_task is not None:
+                resource["task"] = new_task
+            if new_start is not None:
+                current_start = datetime.datetime.fromisoformat(resource["start"])
+                updated_start = current_start + datetime.timedelta(hours=new_start)
+                resource["start"] = updated_start.isoformat()
+            if new_wait is not None:
+                resource["wait"] = new_wait
+            if new_diagnosis is not None:
+                resource["info"]["diagnosis"] = new_diagnosis
+        print(json.dumps(resource))
+
+
+def remove_resource(cid):
+    global resources
+    resources = [resource for resource in resources if resource["cid"] != cid]
+    print(f"Patient {cid} has been released.")
+
 
 # Semaphores for resource management
 surgery_semaphore = Semaphore()
@@ -62,7 +99,7 @@ def callback(callback_response, callback_url):
         'CPEE-CALLBACK': 'true'
     }
     requests.put(callback_url, headers=headers, json=callback_response)
-    print(f"callback: {callback_url}")
+
 
 
 def callback_http_response():
@@ -93,8 +130,8 @@ def process_queue_er():
             with er_semaphore:
                 # Occupy 1 ER personnel for the first patient in the queue
                 db.update_resource('ER', er_count - 1)
-                callback_url, waiting_duration = db.get_queue_er()[0]
-                print(callback_url, 'First patient in the queue go to ER')
+                patient_id, callback_url, waiting_duration = db.get_queue_er()[0]
+                update_resource(patient_id, new_wait=False)
                 # Remove the patient from the queue after treatment
                 db.delete_from_queue_er(callback_url)
 
@@ -111,19 +148,7 @@ def process_queue_er():
                 # Release the occupied ER personnel after treatment
                 db.update_resource('ER', db.get_resource('ER') + 1)
 
-                # Determine if the ER patient has phantom pain or needs further treatment
-                phantom_pain = random.choice(['true', 'false'])
-                if phantom_pain == 'false':
-                    diagnosis = diagnosis_helper.assign_diagnosis('ER')
-                    require_surgery = diagnosis_helper.requires_surgery(diagnosis)
-                else:
-                    diagnosis = ""
-                    require_surgery = ""
-
-                callback_response = {'status': 'ER Treatment finished', 'duration': round(waiting_duration+duration, 2),
-                                     'phantom_pain': phantom_pain,
-                                     'diagnosis': diagnosis,
-                                     'require_surgery': require_surgery}
+                callback_response = {'status': 'ER Treatment finished', 'duration': round(waiting_duration+duration, 2)}
 
                 callback(callback_response, callback_url)
 
@@ -144,7 +169,7 @@ def process_queue_surgery():
             with surgery_semaphore:
                 db.update_resource('Surgery', surgery_room_count - 1)
                 patient_id, diagnosis, status, callback_url, waiting_duration = db.get_queue('Queue_Surgery')[0]
-                print(callback_url, 'First patient in the queue go to surgery')
+                update_resource(patient_id, new_wait=False)
                 db.delete_from_queue('Queue_Surgery', callback_url)
 
                 duration = diagnosis_helper.diagnosis_operation_time(diagnosis)
@@ -179,7 +204,7 @@ def process_queue_nursing_a():
             with bed_a_semaphore:
                 db.update_resource('Bed_A', bed_a_count - 1)
                 patient_id, diagnosis, status, callback_url, waiting_duration = db.get_queue('Queue_Nursing_A')[0]
-                print(callback_url, 'First patient in the queue go to bed A')
+                update_resource(patient_id, new_wait=False)
                 db.delete_from_queue('Queue_Nursing_A', callback_url)
 
                 duration = diagnosis_helper.diagnosis_nursing_time(diagnosis)
@@ -191,12 +216,10 @@ def process_queue_nursing_a():
                     db.update_queue('Queue_Nursing_A', callback_url, waiting_time + duration)
 
                 db.update_resource('Bed_A', db.get_resource('Bed_A') + 1)
-                release = diagnosis_helper.no_complication(diagnosis)
 
                 callback_response = {
                     'status': 'Nursing finished',
-                    'duration': round(waiting_duration+duration, 2),
-                    'release': release
+                    'duration': round(waiting_duration+duration, 2)
                 }
                 callback(callback_response, callback_url)
         gevent.sleep(0.01)
@@ -215,7 +238,7 @@ def process_queue_nursing_b():
             with bed_b_semaphore:
                 db.update_resource('Bed_B', bed_b_count - 1)
                 patient_id, diagnosis, status, callback_url, waiting_duration = db.get_queue('Queue_Nursing_B')[0]
-                print(callback_url, 'First patient in the queue go to bed B')
+                update_resource(patient_id, new_wait=False)
                 db.delete_from_queue('Queue_Nursing_B', callback_url)
 
                 duration = diagnosis_helper.diagnosis_nursing_time(diagnosis)
@@ -227,12 +250,10 @@ def process_queue_nursing_b():
                     db.update_queue('Queue_Nursing_B', callback_url, waiting_time + duration)
 
                 db.update_resource('Bed_B', db.get_resource('Bed_B') + 1)
-                release = diagnosis_helper.no_complication(diagnosis)
 
                 callback_response = {
                     'status': 'Nursing finished',
-                    'duration': round(waiting_duration+duration, 2),
-                    'release': release
+                    'duration': round(waiting_duration+duration, 2)
                 }
                 callback(callback_response, callback_url)
         gevent.sleep(0.01)
@@ -249,17 +270,17 @@ def patient_init():
     global patients_added_working_hour
     patient_id = request.forms.get('patientID')
     patient_type = request.forms.get('patientType')
-    arrival_time = request.forms.get('arrival_time')
+    arrival_time_str = request.forms.get('arrival_time')
     callback_url = request.headers['CPEE-CALLBACK']
+    diagnosis = request.forms.get('diagnosis')
 
-    # Check if the arrival time is during non-working hours
-    if is_not_working_hour(datetime.datetime.fromisoformat(arrival_time)):
+    if is_not_working_hour(datetime.datetime.fromisoformat(arrival_time_str)):
         # Add the patient to the non-working hour queue
-        patient_queue_non_working_hour.put((arrival_time, callback_url, patient_id, patient_type))
+        patient_queue_non_working_hour.put((arrival_time_str, callback_url, patient_id, patient_type, diagnosis))
         patients_added_non_working_hour += 1
     else:
         # Add the patient to the working hour queue
-        patient_queue_working_hour.put((arrival_time, callback_url, patient_id, patient_type))
+        patient_queue_working_hour.put((arrival_time_str, callback_url, patient_id, patient_type, diagnosis))
         patients_added_working_hour += 1
 
     # Check if all non-working hour patients have been added
@@ -272,17 +293,21 @@ def patient_init():
     return callback_http_response()
 
 
-def patient_admission(callback_url, patient_id, patient_type, arrival_time):
+def patient_admission(callback_url, patient_id, patient_type, arrival_time_str, diagnosis):
     """
     Task "Patient Admission"
     This function handles the admission process for a patient based on their type and available resources.
     """
+    
     if patient_type == "ER":
         # Directly admit the patient if they are an ER patient
         status = 'patient admitted'
+        if not patient_id:
+            patient_id = str(uuid.uuid4())
     elif not patient_id:
         # Send the patient home if no patient ID is provided
         status = 'sent home'
+        patient_id = str(uuid.uuid4())
     else:
         # Get the count of available intake personnel
         intake_personnel_count = db.get_resource('Intake')
@@ -298,8 +323,10 @@ def patient_admission(callback_url, patient_id, patient_type, arrival_time):
             # Admit the patient and reserve 1 intake personnel
             db.update_resource('Intake', intake_personnel_count - 1)
             status = 'patient admitted'
-
-    callback_response = {'status': status, 'arrival_time': arrival_time}
+    
+    if status == 'Patient Adimission':
+        add_resources(patient_id, 'Patient Adimission', datetime.datetime.fromisoformat(arrival_time_str), diagnosis, False)
+    callback_response = {'status': status, 'arrival_time': arrival_time_str}
     callback(callback_response, callback_url)
 
 
@@ -309,7 +336,9 @@ def intake():
     Task "Intake"
     """
     try:
-        diagnosis = request.forms.get('diagnosis')
+        patient_id = request.forms.get('patientID')
+
+        update_resource(patient_id, new_task='Intake')
 
         # Simulate the duration of the intake process using a normal distribution
         duration = max(0, random.normal(loc=1, scale=1 / 8, size=None))
@@ -318,11 +347,8 @@ def intake():
         # Release the occupied intake resource
         db.update_resource('Intake', db.get_resource('Intake') + 1)
 
-        # Determine if surgery is required based on the diagnosis
-        require_surgery = diagnosis_helper.requires_surgery(diagnosis)
-
         response.content_type = 'application/json'
-        data = {'status': 'Intake finished', 'duration': round(duration, 2), 'require_surgery': require_surgery}
+        data = {'status': 'Intake finished', 'duration': round(duration, 2)}
         return json.dumps(data)
 
     except Exception as e:
@@ -337,34 +363,26 @@ def handle_er_resource():
     """
     try:
         callback_url = request.headers['CPEE-CALLBACK']
+        patient_id = request.forms.get('patientID')
         er_personnel_count = db.get_resource('ER')
 
         # Check if there are already patients in the ER queue or if no ER personnel are available
         if len(db.get_queue_er()) > 0 or er_personnel_count <= 0:
             # Add the patient to the ER queue if the ER is busy or no personnel are available
-            db.add_to_queue_er(callback_url)
-            print('ER is busy', callback_url, 'added to ER queue')
+            update_resource(patient_id, new_task='ER Treatment', new_wait=True)
+            db.add_to_queue_er(patient_id, callback_url)
+            print('ER is busy, Patient ', patient_id, ' is added to ER queue')
             return callback_http_response()
 
         else:
+            update_resource(patient_id, new_task='ER Treatment', new_wait=False)
             db.update_resource('ER', er_personnel_count - 1)
             duration = max(0, random.normal(loc=2, scale=1 / 2, size=None))
 
             gevent.sleep(duration)
             db.update_resource('ER', db.get_resource('ER') + 1)
 
-            # Determine if the ER patient has phantom pain or needs further treatment
-            phantom_pain = random.choice(['true', 'false'])
-            if phantom_pain == 'false':
-                diagnosis = diagnosis_helper.assign_diagnosis('ER')
-                require_surgery = diagnosis_helper.requires_surgery(diagnosis)
-            else:
-                diagnosis = ""
-                require_surgery = ""
-
-            data = {'status': 'ER Treatment finished', 'duration': round(duration, 2), 'phantom_pain': phantom_pain,
-                    'diagnosis': diagnosis,
-                    'require_surgery': require_surgery}
+            data = {'status': 'ER Treatment finished', 'duration': round(duration, 2)}
             response.content_type = 'application/json'
             return json.dumps(data)
 
@@ -382,15 +400,19 @@ def surgery():
     patient_id = request.forms.get('patientID')
     status = request.forms.get('status')
     diagnosis = request.forms.get('diagnosis')
+    duration = request.forms.get('durtaion')
+
 
     surgery_room_count = db.get_resource('Surgery')
     # Check if there are already patients in the Surgery queue or if no Surgery room are available
     if len(db.get_queue('Queue_Surgery')) > 0 or surgery_room_count <= 0:
         # Add the patient to the Surgery queue if it is busy
+        update_resource(patient_id, new_start=duration, new_task='Surgery', new_wait=True, new_diagnosis=diagnosis)
         db.add_to_queue('Queue_Surgery', patient_id, diagnosis, status, callback_url)
-        print('Surgery room not available', callback_url, 'added to surgery queue')
+        print('Surgery room not available, patient ', patient_id, ' is added to surgery queue')
         return callback_http_response()
     else:
+        update_resource(patient_id, new_start=duration, new_task='Surgery', new_wait=False, new_diagnosis=diagnosis)
         db.update_resource('Surgery', surgery_room_count - 1)
         duration = diagnosis_helper.diagnosis_operation_time(diagnosis)
         gevent.sleep(duration)
@@ -410,46 +432,112 @@ def nursing():
     patient_id = request.forms.get('patientID')
     status = request.forms.get('status')
     diagnosis = request.forms.get('diagnosis')
+    duration = request.forms.get('durtaion')
+
 
     if diagnosis.startswith('A'):
         Bed_A_count = db.get_resource('Bed_A')
         # Check if there are already patients in the nursing bed A queue or if no bed A are available
         if len(db.get_queue('Queue_Nursing_A')) > 0 or Bed_A_count <= 0:
-            print('Bed A not available', callback_url, 'added to Nursing Bed A queue')
             # Add the patient to the nursing bed A queue if it is busy
+            update_resource(patient_id, new_start=duration, new_task='Nursing', new_wait=True, new_diagnosis=diagnosis)
             db.add_to_queue('Queue_Nursing_A', patient_id, diagnosis, status, callback_url)
             return callback_http_response()
         else:
+            update_resource(patient_id, new_start=duration, new_task='Nursing', new_wait=False, new_diagnosis=diagnosis)
             db.update_resource('Bed_A', Bed_A_count - 1)
             duration = diagnosis_helper.diagnosis_nursing_time(diagnosis)
             gevent.sleep(duration)
             db.update_resource('Bed_A', db.get_resource('Bed_A') + 1)
 
-            release = diagnosis_helper.no_complication(diagnosis)
-
-            data = {'status': 'Nursing finished', 'duration': round(duration, 2), 'release': release}
+            data = {'status': 'Nursing finished', 'duration': round(duration, 2)}
             response.content_type = 'application/json'
             return json.dumps(data)
     else:
         Bed_B_count = db.get_resource('Bed_B')
         # Check if there are already patients in the nursing bed B queue or if no bed B are available
         if len(db.get_queue('Queue_Nursing_B')) > 0 or Bed_B_count <= 0:
-            print('Bed B not available', callback_url, 'added to Nursing Bed B queue')
             # Add the patient to the nursing bed B queue if it is busy
+            update_resource(patient_id, new_start=duration, new_task='Nursing', new_wait=True, new_diagnosis=diagnosis)
             db.add_to_queue('Queue_Nursing_B', patient_id, diagnosis, status, callback_url)
             return callback_http_response()
         else:
+            update_resource(patient_id, new_start=duration, new_task='Nursing', new_wait=False, new_diagnosis=diagnosis)
             db.update_resource('Bed_B', Bed_B_count - 1)
             duration = diagnosis_helper.diagnosis_nursing_time(diagnosis)
             gevent.sleep(duration)
             db.update_resource('Bed_B', db.get_resource('Bed_B') + 1)
 
-            release = diagnosis_helper.no_complication(diagnosis)
-
-            data = {'status': 'Nursing finished', 'duration': round(duration, 2), 'release': release}
+            data = {'status': 'Nursing finished', 'duration': round(duration, 2)}
             response.content_type = 'application/json'
             return json.dumps(data)
+        
 
+@app.post('/releasing')
+def releasing():
+    """
+    Task "Releasing"
+    """
+    patient_id = request.forms.get('patientID')
+    
+    remove_resource(patient_id)
+
+
+
+@app.post('/replan')
+def replan():
+    """
+    Task "Releasing"
+    """
+
+    patient_type = request.forms.get('patientType')
+    patient_id = request.forms.get('patientID')
+    diagnosis = request.forms.get('diagnosis')
+    arrival_time = request.forms.get('arrival_time')
+    
+    plan_result = planner(patient_id, arrival_time, {'diagnosis': diagnosis}, resources)
+    
+    if plan_result:
+        reschedule_time = plan_result['reschedule_time']
+    else:
+        # Handle the case where no reschedule time is found (optional)
+        reschedule_time = arrival_time
+
+
+    instance_response = requests.post("https://cpee.org/flow/start/url/",
+                                      data={"behavior": "fork_running",
+                                            "url": "https://cpee.org/hub/server/Teaching.dir/Prak.dir/Challengers.dir/Fen_Shi.dir/main.xml",
+                                            "init": json.dumps({
+                                                "patientType": patient_type,
+                                                "patientID": patient_id,
+                                                "diagnosis": diagnosis,
+                                                "arrival_time": reschedule_time,
+
+                                            })
+                                      })
+    print (
+        f"Response content:, {instance_response.text}, Patient Type: {patient_type}, Patient ID: {patient_id}, diagnosis: {diagnosis}")
+    
+
+    
+    # instance_details = {
+    #     "CPEE-INSTANCE": instance,
+    #     "CPEE-INSTANCE-URL": instance_url,
+    #     "CPEE-INSTANCE-UUID": instance_uuid
+    # }
+
+    # # Set the headers
+    # response.content_type = 'application/json'
+    # response.set_header('CPEE-INSTANTIATION', json.dumps(instance_details))
+    # print("Response Headers:")
+    # for key, value in response.headers.items():
+    #     print(f"{key}: {value}")
+
+    # # Return the response
+    # data = {'status': 're-planned'}
+    # return json.dumps(data)
+   
+    
 
 # end of the process
 
@@ -463,16 +551,14 @@ def process_patient_queue_non_working_hour():
     previous_time = None
     while not patient_queue_non_working_hour.empty():
         # Get the next patient instance from the queue
-        arrival_time_str, callback_url, patient_id, patient_type = patient_queue_non_working_hour.get()
+        arrival_time_str, callback_url, patient_id, patient_type, diagnosis = patient_queue_non_working_hour.get()
         arrival_time = datetime.datetime.fromisoformat(arrival_time_str)
         if previous_time is not None:
             time_difference = round((arrival_time - previous_time).total_seconds() / 3600, 2)
             # Sleep for the time difference to simulate the actual arrival time of patients
             time.sleep(time_difference)
         previous_time = arrival_time
-        print(arrival_time, callback_url, "arrives")
-        # Proceed the patient to the first task in the process
-        patient_admission(callback_url, patient_id, patient_type, arrival_time_str)
+        patient_admission(callback_url, patient_id, patient_type, arrival_time_str, diagnosis)
 
 
 def process_patient_queue_working_hour():
@@ -482,14 +568,13 @@ def process_patient_queue_working_hour():
     """
     previous_time = None
     while not patient_queue_working_hour.empty():
-        arrival_time_str, callback_url, patient_id, patient_type = patient_queue_working_hour.get()
+        arrival_time_str, callback_url, patient_id, patient_type, diagnosis = patient_queue_working_hour.get()
         arrival_time = datetime.datetime.fromisoformat(arrival_time_str)
         if previous_time is not None:
             time_difference = round((arrival_time - previous_time).total_seconds() / 3600, 2)
             time.sleep(time_difference)
         previous_time = arrival_time
-        print(arrival_time, callback_url, "arrives")
-        patient_admission(callback_url, patient_id, patient_type, arrival_time_str)
+        patient_admission(callback_url, patient_id, patient_type, arrival_time_str, diagnosis)
 
 
 def spawn_instances_non_working_hour():
@@ -582,8 +667,9 @@ if __name__ == '__main__':
     gevent.spawn(process_queue_nursing_a)
     gevent.spawn(process_queue_nursing_b)
     gevent.spawn(process_queue_er)
+
     gevent.spawn(spawn_instances_non_working_hour)
-    gevent.spawn(spawn_instances_working_hour)
+    # gevent.spawn(spawn_instances_working_hour)
     gevent.spawn(simulation)
 
     try:
@@ -593,3 +679,4 @@ if __name__ == '__main__':
         print(f"Error: {e}")
         if "Address already in use" in str(e):
             print("Address already in use. Please free the port or use a different one.")
+

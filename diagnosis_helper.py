@@ -26,16 +26,6 @@ class DiagnosisHelper:
             'B3': (16, 4),
             'B4': (16, 4)
         }
-        self.complication_probs = {
-            'A1': 0.01,
-            'A2': 0.01,
-            'A3': 0.02,
-            'A4': 0.02,
-            'B1': 0.001,
-            'B2': 0.01,
-            'B3': 0.02,
-            'B4': 0.02
-        }
 
     def assign_diagnosis(self, type):
         """
@@ -58,7 +48,7 @@ class DiagnosisHelper:
         Check if patient with certain diagnosis need surgery
         """
         non_surgery_diagnoses = {'A1', 'B1', 'B2'}
-        return 'false' if diagnosis in non_surgery_diagnoses else 'true'
+        return False if diagnosis in non_surgery_diagnoses else True
 
     def calculate_duration(self, params):
         """
@@ -81,13 +71,3 @@ class DiagnosisHelper:
         params = self.nursing_params.get(diagnosis)
         return self.calculate_duration(params) if params else None
 
-    def no_complication(self, diagnosis):
-        """
-        Check if the patient with certain diagnosis type could be released (no complication)
-        """
-        complication_prob = self.complication_probs.get(diagnosis, 0)
-        has_complication = random.random() < complication_prob
-        if has_complication:
-            return 'false'
-        else:
-            return 'true'
