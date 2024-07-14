@@ -64,10 +64,7 @@ def planner(cid, time, info, resources):
                 pending_count-=1
 
         return pending_count
-        # if pending_count <2:
-        #     return True
-        
-    # problem.addConstraint(surgery_capacity_constraint, ['reschedule_time'])
+
             
 
 
@@ -89,10 +86,7 @@ def planner(cid, time, info, resources):
                 pending_a_count -= 1
         
         return pending_a_count
-        # if pending_a_count <=2:
-        #     return True
-        
-    # problem.addConstraint(nursing_a_capacity_constraint, ['reschedule_time'])
+
 
 
     def nursing_b_capacity_constraint(time):
@@ -110,10 +104,7 @@ def planner(cid, time, info, resources):
                 pending_b_count -= 1   
 
         return pending_b_count
-        # if pending_b_count <= 2:
-        #     return True
-    
-    # problem.addConstraint(nursing_b_capacity_constraint, ['reschedule_time'])
+
 
     def pending_constraint(time):
         pending_surgery_count = surgery_capacity_constraint(time)
