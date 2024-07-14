@@ -14,6 +14,7 @@ nursing_b_capacity = 40
 diagnosis_helper = dh.DiagnosisHelper()
 
 def get_working_hours(start_time, days=7):
+    start_time = datetime.datetime.fromisoformat(start_time)
     working_hours = []
     end_time = start_time + datetime.timedelta(days=days)
     current_day = start_time.date()
@@ -49,59 +50,78 @@ def planner(cid, time, info, resources):
     problem.addConstraint(intake_resource_constraint, ['reschedule_time'])
 
 
-    # # Constraint to check if no more than two patients have finished intake but not processed in Surgery or Nursing
-    # def intake_finished_constraint(time):
-    #     pending_patients = [state for state in resources if 
-    #                          (state['task'] == 'surgery' and state['wait'] == True) or 
-    #                          (state['task'] == 'nursing' and not require_surgery(state['info']['diagnosis']) and state['wait'] == True)]
-    #     # time should depend on the waiting time for surgery or nursing, to be implemented
-    #     ongoing_count = sum(1 for state in pending_patients if time < calculate_end_time(state['start'], 2))
-    #     return ongoing_count <= 2
-
-    # problem.addConstraint(intake_finished_constraint, ['reschedule_time'])
-
-
-
     def surgery_capacity_constraint(time):
         surgery_pending_patients = sorted([state for state in resources if 
                                    state['task'] == 'surgery' and state['wait']], 
                                   key=lambda x: x['start'])
         
         pending_count = len(surgery_pending_patients)
-        if pending_count >2:
+        if pending_count >=2:
             ongoing_surgeries = [state for state in resources if state['task'] == 'surgery' and not state['wait']]
             ongoing_count = sum(1 for state in ongoing_surgeries if
                                 datetime.datetime.fromisoformat(state['start']) <= time < calculate_end_time(datetime.datetime.fromisoformat(state['start']), diagnosis_helper.diagnosis_operation_time(diagnosis=state['info']['diagnosis'])))
             if ongoing_count < operating_capacity:
                 pending_count-=1
 
-        if pending_count <=2:
-            return True
+        return pending_count
+        # if pending_count <2:
+        #     return True
         
-    problem.addConstraint(surgery_capacity_constraint, ['reschedule_time'])
+    # problem.addConstraint(surgery_capacity_constraint, ['reschedule_time'])
             
 
 
     # Constraint for nursing capacity
-    def nursing_capacity_constraint(time):
-        nursing_pending_patients = sorted([state for state in resources if 
+    def nursing_a_capacity_constraint(time):
+        nursing_a_pending_patients = sorted([state for state in resources if 
                                             state['task'] == 'nursing' and state['wait'] and 
-                                            state['info']['diagnosis'] in ['A1', 'B1', 'B2']], 
+                                            state['info']['diagnosis'] in ['A1']], 
                                             key=lambda x: x['start'])
 
-        pending_count = len(nursing_pending_patients)
-        if pending_count > 2:
-            ongoing_nursing = [state for state in resources if state['task'] == 'nursing' and not state['wait']]
-            ongoing_count = sum(1 for state in ongoing_nursing if
+        
+        pending_a_count = len(nursing_a_pending_patients)
+        if pending_a_count > 2:
+            ongoing_a_nursing = [state for state in resources if state['task'] == 'nursing' and not state['wait'] and 
+                                            state['info']['diagnosis'] in ['A1', 'A2', 'A3', 'A4']]
+            ongoing_a_count = sum(1 for state in ongoing_a_nursing if
                                 datetime.datetime.fromisoformat(state['start']) <= time < calculate_end_time(datetime.datetime.fromisoformat(state['start']), diagnosis_helper.diagnosis_nursing_time(diagnosis=state['info']['diagnosis'])))
-            if ongoing_count < nursing_a_capacity:
-                pending_count -= 1
+            if ongoing_a_count < nursing_a_capacity:
+                pending_a_count -= 1
+        
+        return pending_a_count
+        # if pending_a_count <=2:
+        #     return True
+        
+    # problem.addConstraint(nursing_a_capacity_constraint, ['reschedule_time'])
 
-        if pending_count <= 2:
-            return True
+
+    def nursing_b_capacity_constraint(time):
+        nursing_b_pending_patients = sorted([state for state in resources if 
+                                        state['task'] == 'nursing' and state['wait'] and 
+                                        state['info']['diagnosis'] in ['B1', 'B2']], 
+                                        key=lambda x: x['start'])
+        pending_b_count =  len(nursing_b_pending_patients)
+        if pending_b_count > 2:
+            ongoing_b_nursing = [state for state in resources if state['task'] == 'nursing' and not state['wait'] and 
+                                            state['info']['diagnosis'] in ['B1', 'B2', 'B3', 'B4']]
+            ongoing_b_count = sum(1 for state in ongoing_b_nursing if
+                                datetime.datetime.fromisoformat(state['start']) <= time < calculate_end_time(datetime.datetime.fromisoformat(state['start']), diagnosis_helper.diagnosis_nursing_time(diagnosis=state['info']['diagnosis'])))
+            if ongoing_b_count < nursing_b_capacity:
+                pending_b_count -= 1   
+
+        return pending_b_count
+        # if pending_b_count <= 2:
+        #     return True
     
-    problem.addConstraint(nursing_capacity_constraint, ['reschedule_time'])
+    # problem.addConstraint(nursing_b_capacity_constraint, ['reschedule_time'])
 
+    def pending_constraint(time):
+        pending_surgery_count = surgery_capacity_constraint(time)
+        pending_nursing_a_count = nursing_a_capacity_constraint(time)
+        pending_nursing_b_count = nursing_b_capacity_constraint(time)
+        return pending_surgery_count + pending_nursing_a_count + pending_nursing_b_count <= 2
+
+    problem.addConstraint(pending_constraint, ['reschedule_time'])
 
 
 
@@ -122,8 +142,6 @@ def planner(cid, time, info, resources):
     else:
         return None
 
-# Example usage
-current_time = datetime.datetime(2018, 1, 1, 10, 0).isoformat()  # Example current time
 
 resources = [
     {'cid': '1', 'task': 'nursing', 'start': "2018-01-01T10:00:00", 'info': {'diagnosis': 'A1'}, 'wait': False},
@@ -143,5 +161,7 @@ resources = [
     # {'cid': '8', 'task': 'intake', 'start': datetime.datetime(2018, 1, 1, 10, 0), 'info': {'diagnosis': 'B4'}, 'wait': False},
 ]
 
-# result = planner('6', current_time, {'diagnosis': 'A2'}, resources)
-# print(result)
+# Example usage
+current_time = datetime.datetime(2018, 1, 1, 10, 0).isoformat()  # Example current time
+result = planner('6', current_time, {'diagnosis': 'A2'}, resources)
+print(result)

@@ -316,8 +316,8 @@ def patient_admission(callback_url, patient_id, patient_type, arrival_time_str, 
                            + db.get_count_queue('Queue_Nursing_A', 'Intake finished') \
                            + db.get_count_queue('Queue_Nursing_B', 'Intake finished')
 
-        # no intake resources available or no more than 2 patients finished intake but not processed with next step yet.
-        if intake_personnel_count <= 0 or waiting_in_queue >= 2:
+        # no intake resources available or more than 2 patients finished intake but not processed with next step yet.
+        if intake_personnel_count <= 0 or waiting_in_queue > 2:
             status = 'sent home'
         else:
             # Admit the patient and reserve 1 intake personnel
@@ -501,6 +501,7 @@ def replan():
         reschedule_time = plan_result['reschedule_time']
     else:
         # Handle the case where no reschedule time is found (optional)
+        print("No reschedule time within 7 days found")
         reschedule_time = arrival_time
 
 
