@@ -45,13 +45,14 @@ def update_resource(cid, new_task=None, new_start=None, new_wait=None, new_diagn
                 resource["task"] = new_task
             if new_start is not None:
                 current_start = datetime.datetime.fromisoformat(resource["start"])
-                updated_start = current_start + datetime.timedelta(hours=new_start)
+                updated_start = current_start + datetime.timedelta(hours=float(new_start))
                 resource["start"] = updated_start.isoformat()
             if new_wait is not None:
                 resource["wait"] = new_wait
             if new_diagnosis is not None:
                 resource["info"]["diagnosis"] = new_diagnosis
-        print(json.dumps(resource))
+            print(json.dumps(resource))
+            break
 
 
 def remove_resource(cid):
@@ -60,7 +61,7 @@ def remove_resource(cid):
     print(f"Patient {cid} has been released.")
 
 
-# Semaphores for resource management
+# Semaphores for hospital resource management
 surgery_semaphore = Semaphore()
 bed_a_semaphore = Semaphore()
 bed_b_semaphore = Semaphore()
@@ -99,7 +100,6 @@ def callback(callback_response, callback_url):
         'CPEE-CALLBACK': 'true'
     }
     requests.put(callback_url, headers=headers, json=callback_response)
-
 
 
 def callback_http_response():
@@ -324,9 +324,10 @@ def patient_admission(callback_url, patient_id, patient_type, arrival_time_str, 
             db.update_resource('Intake', intake_personnel_count - 1)
             status = 'patient admitted'
     
-    if status == 'Patient Adimission':
+    if status == 'patient admitted':
+        print(callback_url)
         add_resources(patient_id, 'Patient Adimission', datetime.datetime.fromisoformat(arrival_time_str), diagnosis, False)
-    callback_response = {'status': status, 'arrival_time': arrival_time_str}
+    callback_response = {'patient_id': patient_id, 'status': status, 'arrival_time': arrival_time_str}
     callback(callback_response, callback_url)
 
 
@@ -400,7 +401,7 @@ def surgery():
     patient_id = request.forms.get('patientID')
     status = request.forms.get('status')
     diagnosis = request.forms.get('diagnosis')
-    duration = request.forms.get('durtaion')
+    duration = request.forms.get('duration')
 
 
     surgery_room_count = db.get_resource('Surgery')
@@ -432,7 +433,7 @@ def nursing():
     patient_id = request.forms.get('patientID')
     status = request.forms.get('status')
     diagnosis = request.forms.get('diagnosis')
-    duration = request.forms.get('durtaion')
+    duration = request.forms.get('duration')
 
 
     if diagnosis.startswith('A'):
@@ -504,40 +505,9 @@ def replan():
         print("No reschedule time within 7 days found")
         reschedule_time = arrival_time
 
-
-    instance_response = requests.post("https://cpee.org/flow/start/url/",
-                                      data={"behavior": "fork_running",
-                                            "url": "https://cpee.org/hub/server/Teaching.dir/Prak.dir/Challengers.dir/Fen_Shi.dir/main.xml",
-                                            "init": json.dumps({
-                                                "patientType": patient_type,
-                                                "patientID": patient_id,
-                                                "diagnosis": diagnosis,
-                                                "arrival_time": reschedule_time,
-
-                                            })
-                                      })
     print (
-        f"Response content:, {instance_response.text}, Patient Type: {patient_type}, Patient ID: {patient_id}, diagnosis: {diagnosis}")
-    
+        f"replanned: Patient ID: {patient_id}, diagnosis: {diagnosis}, arrival_time: {reschedule_time}")
 
-    
-    # instance_details = {
-    #     "CPEE-INSTANCE": instance,
-    #     "CPEE-INSTANCE-URL": instance_url,
-    #     "CPEE-INSTANCE-UUID": instance_uuid
-    # }
-
-    # # Set the headers
-    # response.content_type = 'application/json'
-    # response.set_header('CPEE-INSTANTIATION', json.dumps(instance_details))
-    # print("Response Headers:")
-    # for key, value in response.headers.items():
-    #     print(f"{key}: {value}")
-
-    # # Return the response
-    # data = {'status': 're-planned'}
-    # return json.dumps(data)
-   
     
 
 # end of the process
@@ -670,7 +640,7 @@ if __name__ == '__main__':
     gevent.spawn(process_queue_er)
 
     gevent.spawn(spawn_instances_non_working_hour)
-    # gevent.spawn(spawn_instances_working_hour)
+    gevent.spawn(spawn_instances_working_hour)
     gevent.spawn(simulation)
 
     try:

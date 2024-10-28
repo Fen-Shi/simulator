@@ -4,7 +4,6 @@ import diagnosis_helper as dh
 from numpy import random
 
 operating_capacity = 5
-surgery_duration = 2  # Assuming each surgery takes 2 hours
 INTAKE_RESOURCES = 4
 MAX_PENDING_PATIENTS = 2
 nursing_a_capacity = 30
@@ -43,21 +42,21 @@ def planner(cid, time, info, resources):
 
     # Constraint for intake resources
     def intake_resource_constraint(time):
-        ongoing_intake = [state for state in resources if state['task'] == 'intake' and state['start'] <= time]
+        ongoing_intake = [state for state in resources if state['task'] == 'Intake' and datetime.datetime.fromisoformat(state['start']) <= time]
         ongoing_count = sum(1 for state in ongoing_intake if datetime.datetime.fromisoformat(state['start']) <= time < calculate_end_time(datetime.datetime.fromisoformat(state['start']), max(0, random.normal(loc=1, scale=1 / 8))))
         return ongoing_count < INTAKE_RESOURCES
 
     problem.addConstraint(intake_resource_constraint, ['reschedule_time'])
 
-
+ 
     def surgery_capacity_constraint(time):
         surgery_pending_patients = sorted([state for state in resources if 
-                                   state['task'] == 'surgery' and state['wait']], 
+                                   state['task'] == 'Surgery' and state['wait']], 
                                   key=lambda x: x['start'])
         
         pending_count = len(surgery_pending_patients)
         if pending_count >=2:
-            ongoing_surgeries = [state for state in resources if state['task'] == 'surgery' and not state['wait']]
+            ongoing_surgeries = [state for state in resources if state['task'] == 'Surgery' and not state['wait']]
             ongoing_count = sum(1 for state in ongoing_surgeries if
                                 datetime.datetime.fromisoformat(state['start']) <= time < calculate_end_time(datetime.datetime.fromisoformat(state['start']), diagnosis_helper.diagnosis_operation_time(diagnosis=state['info']['diagnosis'])))
             if ongoing_count < operating_capacity:
@@ -65,20 +64,19 @@ def planner(cid, time, info, resources):
 
         return pending_count
 
-            
 
 
     # Constraint for nursing capacity
     def nursing_a_capacity_constraint(time):
         nursing_a_pending_patients = sorted([state for state in resources if 
-                                            state['task'] == 'nursing' and state['wait'] and 
+                                            state['task'] == 'Nursing' and state['wait'] and 
                                             state['info']['diagnosis'] in ['A1']], 
                                             key=lambda x: x['start'])
 
         
         pending_a_count = len(nursing_a_pending_patients)
         if pending_a_count > 2:
-            ongoing_a_nursing = [state for state in resources if state['task'] == 'nursing' and not state['wait'] and 
+            ongoing_a_nursing = [state for state in resources if state['task'] == 'Nursing' and not state['wait'] and 
                                             state['info']['diagnosis'] in ['A1', 'A2', 'A3', 'A4']]
             ongoing_a_count = sum(1 for state in ongoing_a_nursing if
                                 datetime.datetime.fromisoformat(state['start']) <= time < calculate_end_time(datetime.datetime.fromisoformat(state['start']), diagnosis_helper.diagnosis_nursing_time(diagnosis=state['info']['diagnosis'])))
@@ -91,12 +89,12 @@ def planner(cid, time, info, resources):
 
     def nursing_b_capacity_constraint(time):
         nursing_b_pending_patients = sorted([state for state in resources if 
-                                        state['task'] == 'nursing' and state['wait'] and 
+                                        state['task'] == 'Nursing' and state['wait'] and 
                                         state['info']['diagnosis'] in ['B1', 'B2']], 
                                         key=lambda x: x['start'])
         pending_b_count =  len(nursing_b_pending_patients)
         if pending_b_count > 2:
-            ongoing_b_nursing = [state for state in resources if state['task'] == 'nursing' and not state['wait'] and 
+            ongoing_b_nursing = [state for state in resources if state['task'] == 'Nursing' and not state['wait'] and 
                                             state['info']['diagnosis'] in ['B1', 'B2', 'B3', 'B4']]
             ongoing_b_count = sum(1 for state in ongoing_b_nursing if
                                 datetime.datetime.fromisoformat(state['start']) <= time < calculate_end_time(datetime.datetime.fromisoformat(state['start']), diagnosis_helper.diagnosis_nursing_time(diagnosis=state['info']['diagnosis'])))
@@ -104,6 +102,7 @@ def planner(cid, time, info, resources):
                 pending_b_count -= 1   
 
         return pending_b_count
+
 
 
     def pending_constraint(time):
@@ -115,8 +114,6 @@ def planner(cid, time, info, resources):
     problem.addConstraint(pending_constraint, ['reschedule_time'])
 
 
-
-    # Solve the problem
     solutions = problem.getSolutions()
 
     # Sort solutions by the reschedule_time
@@ -133,26 +130,3 @@ def planner(cid, time, info, resources):
     else:
         return None
 
-
-resources = [
-    {'cid': '1', 'task': 'nursing', 'start': "2018-01-01T10:00:00", 'info': {'diagnosis': 'A1'}, 'wait': False},
-    {'cid': '2', 'task': 'nursing', 'start': "2018-01-01T10:00:00", 'info': {'diagnosis': 'A1'}, 'wait': False},
-    {'cid': '3', 'task': 'nursing', 'start': "2018-01-01T10:00:00", 'info': {'diagnosis': 'A1'}, 'wait': False},
-    {'cid': '4', 'task': 'nursing', 'start': "2018-01-01T10:00:00", 'info': {'diagnosis': 'A1'}, 'wait': False},
-    {'cid': '5', 'task': 'nursing', 'start': "2018-01-01T10:00:00", 'info': {'diagnosis': 'A1'}, 'wait': False},
-    {'cid': '6', 'task': 'nursing', 'start': "2018-01-01T10:00:00", 'info': {'diagnosis': 'A1'}, 'wait': True},
-    {'cid': '7', 'task': 'nursing', 'start': "2018-01-01T10:00:00", 'info': {'diagnosis': 'A1'}, 'wait': True},
-    {'cid': '8', 'task': 'nursing', 'start': "2018-01-01T10:00:00", 'info': {'diagnosis': 'A1'}, 'wait': True},
-
-
-    # Intake tasks
-    # {'cid': '5', 'task': 'intake', 'start': datetime.datetime(2018, 1, 1, 10, 0), 'info': {'diagnosis': 'B1'}, 'wait': False},
-    # {'cid': '6', 'task': 'intake', 'start': datetime.datetime(2018, 1, 1, 10, 0), 'info': {'diagnosis': 'B2'}, 'wait': False},
-    # {'cid': '7', 'task': 'intake', 'start': datetime.datetime(2018, 1, 1, 10, 0), 'info': {'diagnosis': 'A1'}, 'wait': False},
-    # {'cid': '8', 'task': 'intake', 'start': datetime.datetime(2018, 1, 1, 10, 0), 'info': {'diagnosis': 'B4'}, 'wait': False},
-]
-
-# Example usage
-current_time = datetime.datetime(2018, 1, 1, 10, 0).isoformat()  # Example current time
-result = planner('6', current_time, {'diagnosis': 'A2'}, resources)
-print(result)
