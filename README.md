@@ -12,6 +12,7 @@ During working hours, planned patients and ER patients arrive, 4 surgery rooms a
 ## Directory Structure
 
 - `simulator.py`: Main script to run the simulation.
+- `planner.py`: Use constraints programming for rescheduling patient appointments.
 - `db.py`: Module for database operations.
 - `diagnosis_helper.py`: Module to assist with patient diagnosis and related operations.
 - `instance_generator.py`: Module to help generate patient instances.
@@ -66,7 +67,7 @@ Run the simulator.py on https://lehre.bpm.in.tum.de/ website.
 but have not yet been processed in the Surgery or Nursing departments, or when all Intake
 resources are occupied upon a patient's arrival.
 - Patients without ID will be directly sent home.
-- Patients sent home will be planned with next appointment(currently return 0 in the process model, to be implemented in Planned)
+- Patients sent home will be planned by planner.py using constraints programming to find the next earliest possible appoitment.
 
 3. **Resource Management:**
 
@@ -81,6 +82,14 @@ operating room outside the working hours
 - Non-working hours have limited resource availability, while working hours have full resource availability.
 - Waiting time in the queue will be added to the duration.
 
+5. **patients replan (`planner.py`)**
+- Variable: `reschedule_time` to target optimal time slots.
+- Domain: Only working hours (Mon-Fri, 8 AM to 5 PM) within the next 7 days.
+- Constraints: 
+   - Intake Resources: Rescheduling considers the availability of intake resources, avoiding conflicts where intake capacity would be exceeded.
+  - Pending Patients: Monitors the number of patients waiting after intake for the next stage. 
+
+
 ## Detailed Function Descriptions
 `simulator.py`
 - `simulation()`: Main function that runs the simulation, alternating between working and non-working hours, and processing patient queues.
@@ -89,6 +98,8 @@ operating room outside the working hours
 - `process_patient_queue_non_working_hour()`: Processes the patient arrivals for non-working hours.
 - `process_patient_queue_working_hour()`: Processes the patient arrivals for working hours.
 
+`planner.py`
+- Using constraints programming to find the next earliest possible appointment for sent home patients.
 
 `db.py`
 - Database operations for managing queues and resources.
