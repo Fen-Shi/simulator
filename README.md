@@ -1,9 +1,9 @@
-# Hospital Simulator
+# Hospital Simulator and Planner
 
 ## Overview
 
 This project simulates the process of a hospital, managing patient admission, patient intake/ ER treatment, surgery, and nursing. 
-The simulation alternates between working hours and non-working hours, processing patient queues and managing resources accordingly.
+The simulation alternates between working hours and non-working hours, processing patient queues and managing resources accordingly. Patients are sent home if treatment is infeasible, and will be precessed by planner using constraints programming algorithm.
 
 During non-working hours, only ER patients arrive, and only 1 surgery room available.
 
@@ -51,12 +51,13 @@ Run the simulator.py on https://lehre.bpm.in.tum.de/ website.
 - `POST /nursing`: Handle nursing.
 
 ## How It Works
-1. **Initialization:**
+1. **Initialization and Patient Processing Strategy:**
 
 - The simulation starts from 00:00 01.01.2018 and runs continuously, 1 h in real world = 1 s in simulator.
-- Patients are spawned based on working and non-working hours.
-- planned patient with Diagnosis 'A' and 'B' arrive during working hours with rate unif(0,1)
-- ER patient arrive throughout the day with rate exp(1)
+- Patient Pre-spawning: To avoid delays, patient instances are generated in advance and immediately placed in queues based on arrival times and type (working hours or non-working hours). By processing these pre-spawned patients alternately, the system efficiently manages queues with minimal waiting time between patient groups.
+- Arrival Scheduling:
+  - During working hours: Planned patients with Diagnosis 'A' or 'B' arrive based on a uniform distribution, and ER patients arrive according to an exponential rate.
+  - During non-working hours: Only ER patients arrive.
 
 
 2. **Patient Admission:**
