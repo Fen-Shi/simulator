@@ -13,6 +13,10 @@ nursing_b_capacity = 40
 diagnosis_helper = dh.DiagnosisHelper()
 
 def get_working_hours(start_time, days=7):
+    """
+    Generate a list of working hours for a given time frame.
+    Working hours are 8 AM to 5 PM, Monday to Friday, for 7 days from the start date.
+    """
     start_time = datetime.datetime.fromisoformat(start_time)
     working_hours = []
     end_time = start_time + datetime.timedelta(days=days)
@@ -27,9 +31,16 @@ def get_working_hours(start_time, days=7):
     return working_hours
 
 def calculate_end_time(start, duration):
+    """
+    Calculate the end time based on start time and duration in hours.
+    """
     return start + datetime.timedelta(hours=duration)
 
 def planner(cid, time, info, resources):
+    """
+    Planner function to determine feasible rescheduling time for patients based on hospital constraints.
+    Uses constraint programming to check intake, surgery, and nursing capacities.
+    """
     problem = Problem()
     current_time = time
     working_hours = get_working_hours(current_time)
@@ -37,11 +48,14 @@ def planner(cid, time, info, resources):
 
     require_surgery = diagnosis_helper.requires_surgery(diagnosis=diagnosis)
 
-    # Add variable and its domain
+    # Add variable 'reschedule_time' with a domain of available working hours
     problem.addVariable('reschedule_time', working_hours)
 
     # Constraint for intake resources
     def intake_resource_constraint(time):
+        """
+        Ensure intake resources do not exceed capacity by checking concurrent intake tasks at the time.
+        """
         ongoing_intake = [state for state in resources if state['task'] == 'Intake' and datetime.datetime.fromisoformat(state['start']) <= time]
         ongoing_count = sum(1 for state in ongoing_intake if datetime.datetime.fromisoformat(state['start']) <= time < calculate_end_time(datetime.datetime.fromisoformat(state['start']), max(0, random.normal(loc=1, scale=1 / 8))))
         return ongoing_count < INTAKE_RESOURCES
@@ -50,6 +64,9 @@ def planner(cid, time, info, resources):
 
  
     def surgery_capacity_constraint(time):
+        """
+        Limit the number of pending surgery cases to prevent overload.
+        """
         surgery_pending_patients = sorted([state for state in resources if 
                                    state['task'] == 'Surgery' and state['wait']], 
                                   key=lambda x: x['start'])
@@ -66,8 +83,10 @@ def planner(cid, time, info, resources):
 
 
 
-    # Constraint for nursing capacity
     def nursing_a_capacity_constraint(time):
+        """
+        Control pending count for nursing type 'A' patients.
+        """
         nursing_a_pending_patients = sorted([state for state in resources if 
                                             state['task'] == 'Nursing' and state['wait'] and 
                                             state['info']['diagnosis'] in ['A1']], 
@@ -88,6 +107,9 @@ def planner(cid, time, info, resources):
 
 
     def nursing_b_capacity_constraint(time):
+        """
+        Control pending count for nursing type 'B' patients.
+        """
         nursing_b_pending_patients = sorted([state for state in resources if 
                                         state['task'] == 'Nursing' and state['wait'] and 
                                         state['info']['diagnosis'] in ['B1', 'B2']], 
@@ -106,6 +128,9 @@ def planner(cid, time, info, resources):
 
 
     def pending_constraint(time):
+        """
+        Constraint that no more than two patients have already finished intake and are waiting
+        """
         pending_surgery_count = surgery_capacity_constraint(time)
         pending_nursing_a_count = nursing_a_capacity_constraint(time)
         pending_nursing_b_count = nursing_b_capacity_constraint(time)

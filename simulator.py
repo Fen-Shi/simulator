@@ -152,7 +152,6 @@ def process_queue_er():
 
                 callback(callback_response, callback_url)
 
-        # Sleep for a short duration to avoid busy-waiting
         gevent.sleep(0.01)
 
 
@@ -524,6 +523,7 @@ def process_patient_queue_non_working_hour():
         # Get the next patient instance from the queue
         arrival_time_str, callback_url, patient_id, patient_type, diagnosis = patient_queue_non_working_hour.get()
         arrival_time = datetime.datetime.fromisoformat(arrival_time_str)
+        # If not the first instance
         if previous_time is not None:
             time_difference = round((arrival_time - previous_time).total_seconds() / 3600, 2)
             # Sleep for the time difference to simulate the actual arrival time of patients
@@ -541,8 +541,10 @@ def process_patient_queue_working_hour():
     while not patient_queue_working_hour.empty():
         arrival_time_str, callback_url, patient_id, patient_type, diagnosis = patient_queue_working_hour.get()
         arrival_time = datetime.datetime.fromisoformat(arrival_time_str)
+        # If there was a previous patient, calculate the time difference between arrivals
         if previous_time is not None:
             time_difference = round((arrival_time - previous_time).total_seconds() / 3600, 2)
+            # Simulate real-time by sleeping for the time difference
             time.sleep(time_difference)
         previous_time = arrival_time
         patient_admission(callback_url, patient_id, patient_type, arrival_time_str, diagnosis)
