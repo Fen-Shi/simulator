@@ -46,6 +46,7 @@ def init_db():
     ''')
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS Queue_ER (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             patient_id TEXT,
             callback_url TEXT,
             duration REAL
